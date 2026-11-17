@@ -1,0 +1,56 @@
+name: emulator updates
+
+# Daily check that .github/emulator-versions.json tracks the newest emulator
+# releases. On the scheduled run, a stale file gets an update PR (opened with a
+# fine-grained PAT so the PR's CI runs). On PRs that change this check, it
+# only reports.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"   # daily, off the top of the hour
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - ".github/scripts/check-emulator-updates.sh"
+      - ".github/scripts/open-emulator-update-pr.sh"
+      - ".github/workflows/emulator-updates.yaml"
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false   # don't abandon a half-opened PR
+
+jobs:
+  check:
+    name: check for new emulator versions
+    runs-on: ubuntu-26.04
+    # The PAT lives in this environment, which only the default branch can
+    # use. PR runs get no environment and so no token.
+    environment: ${{ github.event_name == 'schedule' && 'emulator-updates' || '' }}
+    permissions:
+      contents: read  # check out the repo to read the version file
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Compare with published versions
+        id: check
+        run: bash .github/scripts/check-emulator-updates.sh --write .github/emulator-versions.json
+
+      # The token is only handed to this step, and only when there's a PR to open.
+      - name: Open update PR
+        id: open-pr
+        if: github.event_name == 'schedule' && steps.check.outputs.outdated == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.EMULATOR_UPDATE_TOKEN }}
+          REPO: ${{ github.repository }}
+          BASE_BRANCH: ${{ github.ref_name }}
+          BASE_SHA: ${{ github.sha }}
+          VERSIONS: ${{ steps.check.outputs.versions }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash .github/scripts/open-emulator-update-pr.sh .github/emulator-versions.json

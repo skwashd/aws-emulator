@@ -1,0 +1,132 @@
+name: publish
+
+# On a release tag (vX.Y.Z), once the "release" environment is approved:
+# build each emulator version, then push that exact image to GHCR and attest
+# it, all in one job per version.
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false   # never abandon a half-finished publish
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  versions:
+    name: read version matrix
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read  # check out the repo
+    outputs:
+      matrix: ${{ steps.read-versions.outputs.matrix }}
+    steps:
+      - name: Check out version file
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/emulator-versions.json
+          sparse-checkout-cone-mode: false
+
+      - name: Read emulator versions
+        id: read-versions
+        uses: $/.github/actions/read-versions
+
+  publish:
+    name: publish ${{ matrix.emulator_version }}
+    needs: versions
+    runs-on: ubuntu-26.04
+    # Manual approval and a tag-only deployment rule: Settings -> Environments.
+    environment: release
+    permissions:
+      contents: read       # check out the repo
+      packages: write      # push to GHCR with GITHUB_TOKEN
+      id-token: write      # sign the provenance attestation
+      attestations: write  # store the provenance attestation
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.versions.outputs.matrix) }}
+    steps:
+      - name: Check out repository
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # No build cache for releases (cache poisoning). The image is saved
+      # locally and pushed below as-is; nothing is built twice.
+      - name: Build image
+        id: build-image
+        uses: $/.github/actions/build-image
+        with:
+          emulator-version: ${{ matrix.emulator_version }}
+          sha256-amd64: ${{ matrix.sha256_amd64 }}
+          sha256-arm64: ${{ matrix.sha256_arm64 }}
+          use-cache: "false"
+          archive: ${{ runner.temp }}/image.tar
+
+      # Repo tag v2.1.0 + emulator 1.0.485 ->
+      #   :1.0.485-2.1.0 (immutable), :1.0.485 (newest packaging), :latest
+      - name: Generate image tags
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}
+          flavor: latest=false
+          tags: |
+            type=semver,pattern={{version}},prefix=${{ matrix.emulator_version }}-
+            type=raw,value=${{ matrix.emulator_version }}
+            type=raw,value=latest,enable=${{ matrix.latest }}
+
+      # Log in and push in one step, with a throwaway auth file, so registry
+      # credentials exist only for this step. --preserve-digests makes skopeo
+      # fail rather than alter what was built.
+      - name: Push image to GHCR
+        id: push
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+          ARCHIVE: ${{ runner.temp }}/image.tar
+        run: |
+          set -euo pipefail
+          auth="$(mktemp)"
+          trap 'rm -f "${auth}"' EXIT
+          printf '%s' "${GHCR_TOKEN}" | skopeo login --authfile "${auth}" \
+            --username "${GHCR_USER}" --password-stdin "${REGISTRY}"
+
+          digest=""
+          while read -r ref; do
+            [ -n "${ref}" ] || continue
+            skopeo copy --all --preserve-digests --authfile "${auth}" \
+              --digestfile "${RUNNER_TEMP}/digest" \
+              "oci-archive:${ARCHIVE}" "docker://${ref}"
+            d="$(cat "${RUNNER_TEMP}/digest")"
+            if [ -n "${digest}" ] && [ "${d}" != "${digest}" ]; then
+              echo "::error::${ref} got digest ${d}, expected ${digest}"
+              exit 1
+            fi
+            digest="${d}"
+            echo "Pushed ${ref}@${digest}"
+          done <<< "${TAGS}"
+
+          [ -n "${digest}" ] || { echo "::error::no tags to push"; exit 1; }
+          echo "image=${REGISTRY}/${GITHUB_REPOSITORY,,}" >> "${GITHUB_OUTPUT}"
+          echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
+
+      # Stored with GitHub's attestation API (verify with `gh attestation
+      # verify oci://<image>`). BuildKit's own SLSA provenance and SBOM are
+      # already attached to the image in the registry.
+      - name: Attest build provenance
+        id: attest
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ steps.push.outputs.image }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: false

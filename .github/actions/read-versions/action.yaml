@@ -1,0 +1,35 @@
+name: Read emulator versions
+description: >
+  Validate .github/emulator-versions.json and output it as a job matrix.
+  Check out the repository first.
+
+inputs:
+  file:
+    description: Path to the version file
+    default: .github/emulator-versions.json
+
+outputs:
+  matrix:
+    description: The version list as a compact JSON matrix ({"include":[...]})
+    value: ${{ steps.read-matrix.outputs.matrix }}
+
+runs:
+  using: composite
+  steps:
+    - name: Read and validate version matrix
+      id: read-matrix
+      env:
+        FILE: ${{ inputs.file }}
+      shell: bash
+      run: |
+        jq -e '
+          (.include | type == "array" and length > 0)
+          and (.include | all(
+            (.emulator_version | test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))
+            and (.sha256_amd64 | test("^[0-9a-f]{64}$"))
+            and (.sha256_arm64 | test("^[0-9a-f]{64}$"))
+            and (.latest | type == "boolean")))
+          and ([.include[] | select(.latest)] | length == 1)
+        ' "${FILE}" > /dev/null \
+          || { echo "::error file=${FILE}::invalid version matrix"; exit 1; }
+        echo "matrix=$(jq -c . "${FILE}")" >> "${GITHUB_OUTPUT}"

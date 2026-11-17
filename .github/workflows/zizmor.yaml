@@ -1,0 +1,41 @@
+name: zizmor
+
+# Static security analysis of the GitHub Actions workflows and Dependabot config.
+
+on:
+  push:
+    branches: ["**"]
+    paths: [".github/**"]
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths: [".github/**"]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  zizmor:
+    name: audit workflows
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read  # check out the repo
+    steps:
+      - name: Check out repository
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run zizmor
+        id: zizmor
+        uses: zizmorcore/zizmor-action@53290badfa369cb0bf7ad16342cb62c2fa47ac7b # v0.8.0
+        with:
+          version: 1.31.1
+          persona: pedantic
+          collect: all
+          # Fail the job on findings instead of uploading SARIF. Uploading
+          # needs security-events: write and code scanning enabled.
+          advanced-security: false
