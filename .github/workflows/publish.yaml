@@ -126,10 +126,27 @@ jobs:
       # Stored with GitHub's attestation API (verify with `gh attestation
       # verify oci://<image>`). BuildKit's own SLSA provenance and SBOM are
       # already attached to the image in the registry.
+      # GitHub doesn't offer attestations for private repos owned by a user
+      # account, so this only runs once the repo is public.
       - name: Attest build provenance
         id: attest
+        if: ${{ !github.event.repository.private }}
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ${{ steps.push.outputs.image }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: false
+
+      - name: Note skipped attestation
+        id: note-attestation
+        if: ${{ github.event.repository.private }}
+        env:
+          IMAGE: ${{ steps.push.outputs.image }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          echo "::notice::No GitHub attestation for ${IMAGE}@${DIGEST}: not available for private user-owned repos. BuildKit provenance and SBOM are attached in the registry."
+          {
+            echo "### GitHub attestation skipped"
+            echo "Not available for private repositories owned by a user account."
+            echo "BuildKit SLSA provenance and SBOM are attached to \`${IMAGE}@${DIGEST}\` in the registry."
+          } >> "${GITHUB_STEP_SUMMARY}"
