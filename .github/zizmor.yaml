@@ -1,0 +1,15 @@
+# zizmor config: https://docs.zizmor.sh/configuration/
+# Auto-discovered by zizmor and zizmorcore/zizmor-action.
+rules:
+  dependabot-cooldown:
+    config:
+      # Keep in sync with cooldown.default-days in .github/dependabot.yaml.
+      days: 3
+
+  forbidden-uses:
+    config:
+      # Only actions from these owners may be used.
+      allow:
+        - actions/*
+        - docker/*
+        - zizmorcore/*

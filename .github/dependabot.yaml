@@ -1,0 +1,26 @@
+version: 2
+
+updates:
+  # Pinned action SHAs in .github/workflows/ (Dependabot keeps the
+  # "# vX.Y.Z" comments in sync when it bumps a SHA).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: daily   # cooldown slides per release; daily picks each up as it clears
+    cooldown:
+      default-days: 3   # keep in sync with .github/zizmor.yaml
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci
+
+  # Base image (debian:trixie-slim) in the Dockerfile.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: daily   # cooldown slides per release; daily picks each up as it clears
+    cooldown:
+      default-days: 3
+    commit-message:
+      prefix: docker

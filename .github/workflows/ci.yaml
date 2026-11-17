@@ -1,0 +1,75 @@
+name: ci
+
+# Build only, never push: runs on every branch push and on PR open/update.
+
+on:
+  push:
+    branches: ["**"]   # branches only; tag pushes go to publish.yaml
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  versions:
+    name: read version matrix
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read  # check out the repo
+    outputs:
+      matrix: ${{ steps.read-versions.outputs.matrix }}
+    steps:
+      - name: Check out version file
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/emulator-versions.json
+          sparse-checkout-cone-mode: false
+
+      - name: Read emulator versions
+        id: read-versions
+        uses: $/.github/actions/read-versions
+
+  build:
+    name: build ${{ matrix.emulator_version }}
+    needs: versions
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read  # check out the repo
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.versions.outputs.matrix) }}
+    steps:
+      - name: Check out repository
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build image
+        id: build-image
+        uses: $/.github/actions/build-image
+        with:
+          emulator-version: ${{ matrix.emulator_version }}
+          sha256-amd64: ${{ matrix.sha256_amd64 }}
+          sha256-arm64: ${{ matrix.sha256_arm64 }}
+
+  # One stable check name for branch protection. The matrix job names include
+  # the emulator version, so they change every time the version list changes.
+  result:
+    name: ci result
+    needs: build
+    if: always()
+    runs-on: ubuntu-26.04
+    permissions: {}
+    steps:
+      - name: Require every build to have passed
+        id: require-success
+        env:
+          RESULT: ${{ needs.build.result }}
+        run: test "${RESULT}" = success
