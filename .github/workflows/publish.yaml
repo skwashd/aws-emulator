@@ -96,8 +96,11 @@ jobs:
           ARCHIVE: ${{ runner.temp }}/image.tar
         run: |
           set -euo pipefail
-          auth="$(mktemp)"
-          trap 'rm -f "${auth}"' EXIT
+          # skopeo parses an existing auth file as JSON, so it must not be an
+          # empty mktemp file: use a new path in a private (0700) temp dir.
+          authdir="$(mktemp -d)"
+          trap 'rm -rf "${authdir}"' EXIT
+          auth="${authdir}/auth.json"
           printf '%s' "${GHCR_TOKEN}" | skopeo login --authfile "${auth}" \
             --username "${GHCR_USER}" --password-stdin "${REGISTRY}"
 
