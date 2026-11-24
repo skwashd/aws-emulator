@@ -1,15 +1,15 @@
 {
   "include": [
     {
-      "emulator_version": "1.0.533",
-      "sha256_amd64": "50292801b9ed721aaa0cc3d3784cd0aa978752402877a6a5da65b1ffc5872e90",
-      "sha256_arm64": "4755874897d88db7295a636eef927948bd9176eff34ac4c548b39bd0f5a72634",
+      "emulator_version": "1.0.596",
+      "sha256_amd64": "a07e15b8a1dd85b928848c9a8b3162e12eaceb6152e4d97530763856647c085e",
+      "sha256_arm64": "c4afea168d50e9728d526d279b96421a51a91bea6c1b87f9e6cd5fe24abc5da8",
       "latest": true
     },
     {
-      "emulator_version": "1.0.531",
-      "sha256_amd64": "37a6111ea09463237d61d1f79dec1d981b1c10958f70d54d9aa52f7630674b7c",
-      "sha256_arm64": "d68a239fe4979fe3cfa6707c0ebd1a7cedf508ed8ca0c26e37a2ac402f25cfd8",
+      "emulator_version": "1.0.595",
+      "sha256_amd64": "336577fc65dcdd1041ed812d71a2cb8521162c1795afd195e50b62983a3b6658",
+      "sha256_arm64": "2e48e1cc03a21ecd1e0c6f62967aa079aae6915fbc2424aed983b8fac987e518",
       "latest": false
     }
   ]
