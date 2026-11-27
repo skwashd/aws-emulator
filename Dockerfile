@@ -25,7 +25,7 @@
 
 # Base image pinned by digest, in one place, as a literal FROM so Dependabot
 # can see and bump it. Both stages below build from this.
-FROM debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS base
+FROM debian:trixie-slim@sha256:8aa5a7bf5a1955bddbe7d74fcdd0b91ab30e74362a8b73af672b0481b35b44a0 AS base
 
 ############################
 # Stage 1: download + verify
